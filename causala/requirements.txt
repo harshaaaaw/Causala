@@ -1,0 +1,12 @@
+# CAUSALA causal-IR runtime deps (pinned to versions verified in the venv)
+pydantic==2.13.4
+SQLAlchemy==2.0.52
+aiosqlite==0.22.1
+networkx==3.6.1
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+slowapi==0.1.10
+httpx==0.28.1
+opentelemetry-api==1.39.1
+opentelemetry-sdk==1.39.1
+# depends on aegis-control (sibling) for security + bus

@@ -1,0 +1,20 @@
+[project]
+name = "ragforge"
+version = "1.0.0"
+description = "Structure-aware RAG with hybrid search, heading provenance for citations, and measured chunking trade-offs."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Deva Harsha Mummareddy" }]
+keywords = ["rag", "retrieval", "embeddings", "chunking", "hybrid-search"]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
