@@ -23,7 +23,6 @@ from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-
 from trustcore.security import AuthError, WeakSecretError, get_logger, verify_token
 
 from . import Causala
