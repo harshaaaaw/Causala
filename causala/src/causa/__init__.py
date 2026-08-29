@@ -1,11 +1,19 @@
 """CAUSALA: causal-inference retrieval over a compiled causal knowledge layer.
 
-v0.2 production-grade: idempotent ingest, claim retraction/supersession,
-bi-directional traversal (forward path + backward ancestry), conflict detection,
-cached graph, structured logging. Reuses AEGIS security logging.
+v0.3 premium: simulation with 90% CI + honesty engine + signed audit + warehouse ingest,
+plus idempotent ingest, retraction, bi-directional traversal, conflict detection,
+cached graph, structured logging.
 
-Design (anti-slop + IR-correct): - Compiled-once knowledge with provenance (source) + confidence. - Idempotent ingest: same (tenant, cause, effect, source) key never duplicates. - Correctable: claims can be retracted (soft-delete) or superseded (history kept). - Bi-directional: forward `retrieve_path` (cause->effect) AND backward
-  `retrieve_ancestors` (effect->root causes). Both citation-backed. - Conflict surfacing: a cause with two divergent effects is flagged, not hidden. - Tenant isolation: every query scoped by tenant_id; idempotency key includes it. - No hallucination: answers only from ingested, sourced, active claims.
+Design (anti-slop + IR-correct):
+- Compiled-once knowledge with provenance (source) + confidence.
+- Idempotent ingest: same (tenant, cause, effect, source) key never duplicates.
+- Correctable: claims can be retracted or superseded (history kept).
+- Bi-directional: forward `retrieve_path` AND backward `retrieve_ancestors`.
+- Conflict surfacing: a cause with two divergent effects is flagged.
+- Tenant isolation: every query scoped by tenant_id.
+- No hallucination: answers only from ingested, sourced, active claims.
+- Honesty: every simulate returns point + 90% CI + contested flag; thin data widens CI.
+- Audit: every simulate writes a hash-chained, HMAC-signed record.
 """
 from __future__ import annotations
 
@@ -17,9 +25,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from trustcore.security import get_logger
 from sqlalchemy import Boolean, Column, Float, Integer, String, Text, create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from trustcore.security import get_logger
 
 log = get_logger("causala.engine")
 
@@ -59,6 +67,23 @@ class CausalAnswer:
     contested: bool
 
 
+@dataclass
+class SimulationResult:
+    lever: str
+    delta_percent: float
+    outcome: str
+    point: float
+    ci_low: float
+    ci_high: float
+    ci_width: float
+    confidence: float
+    contested: bool
+    citations: list[str]
+    path: list[dict[str, str]]
+    honest_note: str
+    audit_id: str
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -83,15 +108,32 @@ class _ClaimRow(Base):
 class Causala:
     CONFIDENCE_FLOOR = 0.5
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, audit_secret: str | None = None):
         url = f"sqlite:///{Path(db_path).as_posix()}"
         self._engine = create_engine(url)
         Base.metadata.create_all(self._engine)
         self._session = sessionmaker(bind=self._engine, expire_on_commit=False)
         self._graph_cache: dict[str, Any] | None = None  # tenant -> DiGraph
         self._graph_dirty: set[str] = set()
+        self._db_path = db_path
+        # audit is alongside DB: <db>.audit.jsonl hash-chained, optionally signed
+        base = str(Path(db_path).with_suffix("")) + ".audit.jsonl"
+        audit_path = base if db_path != ":memory:" else str(
+            Path.cwd() / ".causala.audit.jsonl"
+        )
+        # for :memory: use temp file per instance
+        if db_path == ":memory:":
+            import tempfile
+
+            audit_path = str(
+                Path(tempfile.gettempdir()) / f"causala-{uuid.uuid4().hex[:8]}.audit.jsonl"
+            )
+        self._audit_secret = audit_secret
+        self._audit_path = audit_path
+        self._graph_version: dict[str, int] = {}
 
     # ---- ingest (compile once, idempotent) -----------------------------------
+
     def ingest_claim(self, cause: str, effect: str, confidence: float,
                      source: str, tenant_id: str, mechanism: str = "",
                      supersedes: str | None = None) -> str:
@@ -115,6 +157,7 @@ class Causala:
                 supersedes=supersedes, created_at=time.time()))
             s.commit()
         self._graph_dirty.add(tenant_id)
+        self._graph_version[tenant_id] = self._graph_version.get(tenant_id, 0) + 1
         log.info("ingest", extra={"tenant": tenant_id, "cause": cause, "effect": effect,
                                   "source": source, "contested": contested})
         return claim_id
@@ -125,6 +168,7 @@ class Causala:
             if row:
                 row.active = False
                 self._graph_dirty.add(row.tenant_id)
+                self._graph_version[row.tenant_id] = self._graph_version.get(row.tenant_id, 0) + 1
                 s.commit()
                 log.info("retract", extra={"claim_id": claim_id, "reason": reason})
 
@@ -134,6 +178,7 @@ class Causala:
             return self._row_to_claim(row) if row else None
 
     # ---- retrieval (cite-backed) ---------------------------------------------
+
     def retrieve_causes(self, effect: str, tenant_id: str) -> list[CausalClaim]:
         with self._session() as s:
             rows = (s.query(_ClaimRow).filter_by(effect=effect, tenant_id=tenant_id,
@@ -170,7 +215,115 @@ class Causala:
     def what_if(self, query: str, tenant_id: str) -> CausalAnswer:
         return self.what_if_cause(self._extract_key(query), tenant_id)
 
+    # ---- simulation with honesty + audit (core business problem) --------------
+
+    def simulate(self, lever: str, delta_percent: float, tenant_id: str) -> list[SimulationResult]:
+        """Do-calculus: lever +delta% -> downstream outcomes with point + 90% CI.
+
+        Each reachable outcome is recomputed via the cited causal path.
+        Honesty: thin data widens CI; contested edges widen further.
+        Audit: every outcome writes a hash-chained signed record.
+        """
+        from .audit import AuditSpine
+        from .simulate import _ci_for_path, _honest_note, _path_confidence
+
+        g = self._graph(tenant_id)
+        if lever not in g:
+            return []
+        # count tenant claims for small-data widening
+        with self._session() as s:
+            n_claims = s.query(_ClaimRow).filter_by(tenant_id=tenant_id, active=True).count()
+        audit = AuditSpine(self._audit_path, self._audit_secret)
+        graph_ver = self._graph_version.get(tenant_id, 0)
+        results: list[SimulationResult] = []
+        # BFS to find all reachable outcomes with shortest path
+        import networkx as nx
+        for outcome in g.nodes:
+            if outcome == lever:
+                continue
+            try:
+                path_nodes = nx.shortest_path(g, lever, outcome)
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                continue
+            # collect claims along path
+            claims = []
+            path_dicts: list[dict[str, str]] = []
+            for a, b in itertools.pairwise(path_nodes):
+                cl = g.get_edge_data(a, b)["claim"]
+                claims.append(cl)
+                path_dicts.append({"cause": a, "effect": b, "source": cl.source, "confidence": str(cl.confidence)})
+            path_conf = _path_confidence(claims)
+            # point: delta scaled by path confidence product (direction sign preserved)
+            point = round(delta_percent * path_conf, 3)
+            # CI
+            ci_low, ci_high, widen_note = _ci_for_path(claims, n_claims, point)
+            ci_width = round(ci_high - ci_low, 3)
+            contested = any(c.contested for c in claims) or path_conf < 0.5
+            honest = _honest_note(path_conf, n_claims, ci_low, ci_high, contested)
+            if widen_note:
+                honest = f"{honest} ({widen_note})"
+            citations = list({c.source for c in claims})
+            # audit trail per outcome
+            rec = audit.record(
+                tenant_id=tenant_id,
+                lever=lever,
+                delta_percent=delta_percent,
+                outcome=outcome,
+                point=point,
+                ci_low=ci_low,
+                ci_high=ci_high,
+                confidence=path_conf,
+                contested=contested,
+                citations=citations,
+                path=path_dicts,
+                graph_version=graph_ver,
+            )
+            results.append(SimulationResult(
+                lever=lever,
+                delta_percent=delta_percent,
+                outcome=outcome,
+                point=point,
+                ci_low=ci_low,
+                ci_high=ci_high,
+                ci_width=ci_width,
+                confidence=path_conf,
+                contested=contested,
+                citations=citations,
+                path=path_dicts,
+                honest_note=honest,
+                audit_id=rec.audit_id,
+            ))
+        # sort most confident first
+        return sorted(results, key=lambda r: r.confidence, reverse=True)
+
+    def get_audit(self, audit_id: str) -> dict[str, Any] | None:
+        from .audit import AuditSpine
+        audit = AuditSpine(self._audit_path, self._audit_secret)
+        return audit.get(audit_id)
+
+    def verify_audit_chain(self) -> tuple[bool, str]:
+        from .audit import AuditSpine
+        audit = AuditSpine(self._audit_path, self._audit_secret)
+        return audit.verify_chain()
+
+    def recent_audits(self, tenant_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        from .audit import AuditSpine
+        audit = AuditSpine(self._audit_path, self._audit_secret)
+        return audit.list_recent(tenant_id, limit)
+
+    def ingest_csv(self, csv_path: str, tenant_id: str, default_source: str = "warehouse-export") -> dict[str, Any]:
+        from .ingest import ingest_csv
+        return ingest_csv(self, csv_path, tenant_id, default_source)
+
+    def ingest_json(self, json_path: str, tenant_id: str) -> dict[str, Any]:
+        from .ingest import ingest_json
+        return ingest_json(self, json_path, tenant_id)
+
+    # alias for ergonomics: engine.ingest(...) == ingest_claim
+    ingest = ingest_claim
+
     # ---- graph traversal ------------------------------------------------------
+
     def _graph(self, tenant_id: str):
         import networkx as nx
         if tenant_id in self._graph_dirty or self._graph_cache is None \
@@ -204,12 +357,7 @@ class Causala:
 
     def retrieve_ancestors(self, effect: str, tenant_id: str,
                            max_hops: int = 6) -> list[CausalClaim]:
-        """Backward ancestry walk: every root cause of `effect`, cite-backed.
-
-        Returns the union of all edges on all simple paths that END at `effect`.
-        This is the real 'why did X happen?' - it surfaces every upstream cause,
-        not just a single hop.
-        """
+        """Backward ancestry walk: every root cause of `effect`, cite-backed."""
         import networkx as nx
         g = self._graph(tenant_id)
         if effect not in g:
@@ -253,6 +401,7 @@ class Causala:
         return out
 
     # ---- internals ------------------------------------------------------------
+
     @staticmethod
     def _row_to_claim(r: _ClaimRow) -> CausalClaim:
         return CausalClaim(

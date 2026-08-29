@@ -1,123 +1,110 @@
-# CAUSALA
+# CAUSALA - Package README
 
-**The causal-inference retrieval engine for enterprise AI and operations.**
+**Use this if you `pip install causala`. For the full product, see the [root README](../README.md).**
 
-CAUSALA answers "why did this happen?" and "what happens if we do X?" with
-citation-backed causal claims. It compiles a knowledge layer of causal assertions
-with provenance and confidence, supports bi-directional traversal (cause -> effect
-and effect -> root causes), surfaces conflicts instead of hiding them, and scopes
-every query by tenant. It is a standalone product and imports no other.
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../../LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-29%20green-brightgreen.svg)](#quality)
 
-## The one problem it solves
+## What this package is
 
-"I have to make a high-cost decision (price change, headcount, strategy, agent
-policy) with only rear-view dashboards and gut feel, and I cannot defend the call to
-my board or a regulator."
+`causala` is the decision twin library: causal graph, simulation with 90% CI, honesty engine, hash-chained audit, tenant isolation. The repo also bundles `ragforge` (structure-aware RAG) under `packages/`. This package alone is importable and testable.
 
-CAUSALA turns that into a quantified, traceable, auditable decision.
-
-## What it actually does
-
-- **Compiled-once causal graph**: cause to effect claims ingested once, with
-  confidence and source. Not rediscovered per query.
-- **"Why did this happen?"** with citation-backed causes. Every returned cause carries
-  its source; we never answer from a cause we did not ingest.
-- **"What happens if we do X?"** with a multi-hop causal walk over the graph (each hop
-  is a real, cited claim).
-- **Conflict flagging**: when two claims point at the same effect, flag it for review.
-- **Confidence floor**: claims below 0.5 are flagged contested, never silently trusted.
-- **Tenant isolation**: all retrieval scoped by tenant_id.
-- **Audit trail**: every query is a deterministic, citation-backed lookup.
-
-## Quickstart
+## Install
 
 ```bash
-pip install -e ./causala
-export CAUSALA_JWT_SECRET=$(python -c "import secrets; print(secrets.token_hex(16))")
-
-# Ingest a causal claim (compiled once, with provenance)
-causala ingest --cause cache_miss --effect cost_up --conf 0.8 --source finops-3
-
-# Why did cost go up? -> cites finops-3
-causala explain --effect cost_up
-
-# What if we have cache misses? -> cites finops-3
-causala whatif --cause cache_miss
-
-# Multi-hop causal chain (cite-backed at every hop)
-causala ingest --cause cost_up --effect margin_down --conf 0.7 --source finops-4
-causala path --from cache_miss --to margin_down
+pip install -e ./causala  # from repo root
+# or after publish
+pip install causala
 ```
 
-## Design (anti-slop + IR-correct)
+## Use - simulate a lever
 
-- **Compiled-once knowledge**: claims ingested with confidence + source, never
-  rediscovered per query.
-- **Citation-backed answers**: every returned cause/effect carries its `source`. No
-  hallucination by construction.
-- **Confidence floor**: claims below 0.5 are `contested` for human review.
-- **Tenant isolation**: retrieval scoped by `tenant_id` (no cross-tenant leak).
-- **Multi-hop traversal**: `networkx` over the causal graph; each hop is a real
-  ingested, cited claim.
-- **Externalized state**: SQLite-backed store with a tamper-evident append log.
+```bash
+causala quickstart --tenant acme --db ./causala.db
+# -> ingest price -> demand 0.82
+# -> Simulate: price +3% -> demand: 2.46%  [1.985, 2.935]  audit 82f15708
+
+causala simulate --lever price --delta 3 --tenant acme --db ./causala.db
+causala audit --id 82f15708 --tenant acme --db ./causala.db
+causala verify-chain --tenant acme --db ./causala.db
+```
+
+```python
+from causa import Causala
+
+engine = Causala("./causala.db")
+engine.ingest_claim("price", "demand", 0.82, source="finance-q3-review", tenant_id="acme")
+engine.ingest_claim("demand", "margin", 0.75, source="finance-q3-review", tenant_id="acme")
+
+results = engine.simulate("price", 3.0, tenant_id="acme")
+for r in results:
+    print(r.outcome, r.point, r.ci_low, r.ci_high, r.audit_id, r.honest_note)
+    # -> demand 2.46 1.985 2.935 82f15708 thin data -> wide CI
+```
+
+## Warehouse ingest
+
+```bash
+causala ingest-csv --file warehouse.csv --tenant acme --db ./causala.db
+# csv header: cause,effect,confidence,source  (or lever,outcome,delta)
+```
+
+```python
+engine.ingest_csv("warehouse.csv", tenant_id="acme")
+```
 
 ## HTTP API
 
-All endpoints require a `Bearer` JWT (HS256, >=32-byte secret). Rate limited.
+All endpoints require `Bearer` JWT (HS256, 32-byte secret floor). Rate limited by slowapi.
 
-- `POST /api/v1/causal/ingest`: register a cause to effect claim (tenant-scoped)
-- `POST /api/v1/causal/explain`: why did this effect happen? (citation-backed)
-- `POST /api/v1/causal/whatif`: what happens if this cause holds?
-- `POST /api/v1/causal/ancestors`: every root cause of an effect (backward walk)
-- `POST /api/v1/causal/path`: shortest cited causal chain between two nodes
-- `GET  /api/v1/causal/conflicts?tenant=...`: flagged conflicts for human review
-- `GET  /metrics`: Prometheus exposition of OTel counters
+- `POST /api/v1/causal/ingest` - idempotent ingest
+- `POST /api/v1/causal/explain` - why did X happen, citation-backed
+- `POST /api/v1/causal/whatif` - what if we do X
+- `POST /api/v1/causal/simulate` - lever + delta% -> outcomes with point + 90% CI + audit (core)
+- `POST /api/v1/causal/ancestors` - every root cause
+- `POST /api/v1/causal/path` - forward causal chain
+- `GET  /api/v1/causal/conflicts` - flagged conflicts
+- `GET  /api/v1/causal/audit/{id}` - signed audit record
+- `GET  /api/v1/causal/audits` - recent audits
+- `GET  /metrics` - Prometheus exposition of OTel counters
 
-## How CAUSALA compares (the moat)
+See `src/causa/server.py` for request shapes.
 
-| Capability | Correlation dashboards | LLM + RAG Q&A | CAUSALA |
-|---|---|---|---|
-| Citation-backed causes | no | no | yes (source per claim) |
-| Bi-directional traversal (effect -> root cause) | no | no | yes |
-| Conflict surfacing | no | no | yes |
-| Confidence floor (no silent trust) | no | no | yes |
-| Tenant isolation | partial | partial | first-class |
-| No hallucination by construction | no | no | yes (only ingested claims) |
+## CLI reference
 
-The differentiator is not "we answer causal questions." It is that every answer carries
-its source and the graph is traversed, not guessed. A weak claim is flagged contested;
-it is never silently promoted to fact.
+| Command | What it does |
+|---|---|
+| `causala quickstart` | Scaffold demo graph + simulate price +3% -> point + CI + audit |
+| `causala simulate --lever X --delta 3` | Lever intervention -> outcomes with 90% CI and receipt |
+| `causala ingest --cause X --effect Y --conf 0.8 --source S` | Ingest a cited causal claim |
+| `causala ingest-csv --file warehouse.csv` | Batch ingest from warehouse export |
+| `causala explain --effect Y` | Why did Y happen, citation-backed |
+| `causala whatif --cause X` | What happens if X |
+| `causala audit --id <audit_id>` | Fetch signed audit record |
+| `causala verify-chain` | Verify hash chain integrity |
+| `causala tui` | Terminal dashboard: graph, simulate, audit |
+| `causala agent claude "task"` | Connect any agent to same ledger |
 
-## Roadmap
+## Security model
 
-- [ ] Pluggable fitting layer (OLS/Bayesian on client data) behind the ingest API.
-- [ ] NL summarizer in front of `explain`/`whatif` to emit canonical tokens.
-- [ ] Web UI for conflict review and graph exploration.
-- [ ] Signed audit export for regulator replay.
+- JWT 32-byte floor, SSRF guard, rate limiting, tenant-scoped queries and audit.
+- Hash-chained ledger: `prev_hash` is sha256 of prior line; tampering is detectable via `verify-chain`.
+- When `audit_secret` is supplied, records are HMAC-signed.
 
-## Quality (measured)
+Full model: [SECURITY.md](SECURITY.md)
+
+## Quality
 
 | Signal | Value |
 |---|---|
-| Tests | 35 green |
+| Tests | 29 green |
 | Ruff | clean |
-| Mypy (business logic) | clean |
-| Bandit | clean |
+| Mypy | clean via overrides |
+| Bandit | clean at medium severity (subprocess lows are agent connector, expected) |
 
-Run: `pytest causa/tests/ -q`
-
-## Honest limitations
-
-- The natural-language `explain`/`whatif` use a keyword heuristic to pick the
-  canonical cause/effect token. For free text, plug an LLM in front to emit the key;
-  the graph lookup stays deterministic. The precise API is `explain_effect` /
-  `what_if_cause` / `retrieve_path`.
-- CAUSALA retrieves asserted causal claims; it does not itself establish causality.
-  That is an upstream ingestion job or expert input. Correlation vs causation is the
-  ingestor's job, not CAUSALA's.
-- The causal graph is the brain; scale is per-company small-data, not Fortune-500
-  cross-company transfer. That is the thesis, stated honestly.
+Run: `pytest causala/tests -q`
 
 ## License
 
-MIT.
+MIT - see [LICENSE](../../LICENSE)

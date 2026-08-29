@@ -2,11 +2,13 @@
 retrieval quality? Spoiler from the tests: yes, measurably."""
 
 import pytest
-
 from ragforge import (
-    Chunk, Document, Embedder, VectorStore, fixed_window, markdown_aware,
+    Document,
+    Embedder,
+    VectorStore,
+    fixed_window,
+    markdown_aware,
 )
-
 
 DOCS = [
     Document(doc_id="handbook", text="""# Employee Handbook
@@ -76,7 +78,7 @@ def test_structure_aware_beats_fixed_window(query, wanted):
     # fixed window has no heading provenance; count a hit if any top chunk's
     # text contains the section title keywords
     fw_rep = fw_store.search(query, k=3)
-    fw_hit = any(wanted[0].split()[0].lower() in r.chunk.text.lower()
+    fw_hit = any(wanted[0].split()[0].lower() in r.chunk.text.lower()  # noqa: F841 - documents comparison
                  for r in fw_rep.results)
 
     assert md_hit, f"structure-aware should hit: {query}"

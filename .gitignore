@@ -5,13 +5,21 @@ __pycache__/
 .ruff_cache/
 .coverage
 *.coverage
+htmlcov/
 *.db
 *.egg-info/
 .venv/
+venv/
+.env
 *.jsonl
 *.cov.json
 
 # runtime artifacts
-__*/
-.boot_*/
+__chaos_state/
+.boot_runs/
 state/
+.chaos_state/
+dist/
+build/
+*.audit.jsonl
+.causala*.audit.jsonl

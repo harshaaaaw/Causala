@@ -1,26 +1,26 @@
 """CAUSALA HTTP API: causal-inference retrieval as a service.
 
-Reuses AEGIS security (JWT authN, 32-byte secret floor, SSRF guard) and the
-control-bus pattern. Async endpoints, rate limited, tenant-scoped.
-
-Endpoints (all require `Bearer` JWT; tenant comes from the verified token):
+Endpoints (all require `Bearer` JWT; tenant comes from verified token):
 - POST /api/v1/causal/ingest      -> idempotent ingest (returns existing id if dup)
 - POST /api/v1/causal/explain     -> highest-confidence cause of an effect
 - POST /api/v1/causal/whatif      -> effect of a cause
 - POST /api/v1/causal/ancestors   -> full backward ancestry (why did X)
 - POST /api/v1/causal/path        -> forward causal chain
+- POST /api/v1/causal/simulate    -> lever + delta -> outcomes + 90% CI + audit (core business problem)
 - GET  /api/v1/causal/conflicts   -> flagged conflicting claims
+- GET  /api/v1/causal/audit/{id}  -> audit record
+- GET  /api/v1/causal/audits      -> recent audits for tenant
 - GET  /metrics                   -> Prometheus
 """
 from __future__ import annotations
 
-from trustcore.security import AuthError, WeakSecretError, get_logger, verify_token
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from trustcore.security import AuthError, WeakSecretError, get_logger, verify_token
 
 from . import Causala
 from .observability import record_conflict, record_ingest, record_lookup
@@ -36,6 +36,11 @@ class IngestReq(BaseModel):
 
 class KeyReq(BaseModel):
     key: str
+
+
+class SimulateReq(BaseModel):
+    lever: str
+    delta_percent: float
 
 
 log = get_logger("causala.server")
@@ -54,10 +59,9 @@ limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
 
 def get_app(db_path: str, jwt_secret: str, enable_rate_limit: bool = True) -> FastAPI:
     cfg = CausalaConfig(db_path=db_path, jwt_secret=jwt_secret)
-    engine = Causala(cfg.db_path)
-    app = FastAPI(title="CAUSALA", version="0.2.0")
-    # The decorators above bind to the module-global `limiter`; app.state.limiter
-    # MUST be that same instance or limits silently no-op. (slowapi invariant.)
+    engine = Causala(cfg.db_path, audit_secret=jwt_secret)
+    app = FastAPI(title="CAUSALA", version="0.3.0")
+    # The decorators bind to module-global limiter; state must be same instance or limits no-op.
     limiter.enabled = enable_rate_limit
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -110,6 +114,33 @@ def get_app(db_path: str, jwt_secret: str, enable_rate_limit: bool = True) -> Fa
         return [{"cause": c.cause, "effect": c.effect, "confidence": c.confidence,
                  "source": c.source} for c in chain]
 
+    @app.post("/api/v1/causal/simulate")
+    @limiter.limit("20/minute")
+    async def simulate(request: Request, body: SimulateReq, tenant: str = Depends(tenant_of)):
+        """Core decision twin: lever + delta -> outcomes with point + 90% CI + audit."""
+        if abs(body.delta_percent) > 100:
+            raise HTTPException(400, "delta_percent must be within [-100, 100]")
+        results = engine.simulate(body.lever, body.delta_percent, tenant)
+        record_lookup(tenant)
+        return [
+            {
+                "lever": r.lever,
+                "delta_percent": r.delta_percent,
+                "outcome": r.outcome,
+                "point": r.point,
+                "ci_low": r.ci_low,
+                "ci_high": r.ci_high,
+                "ci_width": r.ci_width,
+                "confidence": r.confidence,
+                "contested": r.contested,
+                "citations": r.citations,
+                "path": r.path,
+                "honest_note": r.honest_note,
+                "audit_id": r.audit_id,
+            }
+            for r in results
+        ]
+
     @app.get("/api/v1/causal/conflicts")
     @limiter.limit("30/minute")
     async def conflicts(request: Request, tenant: str = Depends(tenant_of)):
@@ -119,11 +150,21 @@ def get_app(db_path: str, jwt_secret: str, enable_rate_limit: bool = True) -> Fa
             record_conflict(tenant)
         return rows
 
+    @app.get("/api/v1/causal/audit/{audit_id}")
+    @limiter.limit("30/minute")
+    async def audit_get(request: Request, audit_id: str, tenant: str = Depends(tenant_of)):
+        rec = engine.get_audit(audit_id)
+        if not rec or rec.get("tenant_id") != tenant:
+            raise HTTPException(404, "audit not found")
+        return rec
+
+    @app.get("/api/v1/causal/audits")
+    @limiter.limit("30/minute")
+    async def audits(request: Request, tenant: str = Depends(tenant_of)):
+        return engine.recent_audits(tenant)
+
     @app.get("/metrics")
     async def metrics() -> PlainTextResponse:
-        # Real OTel counters (exportable to any collector via the SDK).
-        # Rendered in Prometheus-exposition text so /metrics stays usable even
-        # before a collector is wired.
         lines = ["# CAUSALA metrics (OpenTelemetry)"]
         for name in ("causala.ingests", "causala.lookups", "causala.conflicts"):
             lines.append(f"# TYPE {name} counter")

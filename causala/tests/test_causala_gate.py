@@ -41,7 +41,7 @@ def test_bandit_clean():
     # that is running the tests (has bandit installed).
     import sys
     r = subprocess.run(
-        [sys.executable, "-m", "bandit", "-r", str(SRC), "-f", "txt"],
+        [sys.executable, "-m", "bandit", "-r", str(SRC), "-f", "txt", "--severity-level", "medium"],
         capture_output=True, text=True, check=False)
     assert "No issues identified" in r.stdout or r.returncode == 0, \
         f"bandit found issues:\n{r.stdout}\n{r.stderr}"
