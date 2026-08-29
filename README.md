@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.svg?v=abc123" width="88" height="88" alt="CAUSALA twin graph logo"/>
+  <img src="docs/logo.svg?v=1c1ac52" width="88" height="88" alt="CAUSALA twin graph logo"/>
 </p>
 
 <h1 align="center">CAUSALA - The decision twin that proves what your next lever will cause</h1>
@@ -25,11 +25,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif?v=abc123" alt="CAUSALA terminal: causala quickstart becomes point plus 90 percent CI plus receipt" width="720"/>
+  <img src="docs/demo.gif?v=1c1ac52" alt="CAUSALA terminal: causala quickstart becomes point plus 90 percent CI plus receipt" width="720"/>
 </p>
 
 <p align="center">
-  <img src="docs/demo-web.gif?v=abc123" alt="CAUSALA browser twin: ingest left, graph center, receipt right, same SQLite ledger" width="720"/>
+  <img src="docs/demo-web.gif?v=1c1ac52" alt="CAUSALA browser twin: ingest left, graph center, receipt right, same SQLite ledger" width="720"/>
 </p>
 
 ```bash
