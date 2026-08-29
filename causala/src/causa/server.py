@@ -14,6 +14,8 @@ Endpoints (all require `Bearer` JWT; tenant comes from verified token):
 """
 from __future__ import annotations
 
+import os
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +23,7 @@ from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+
 from trustcore.security import AuthError, WeakSecretError, get_logger, verify_token
 
 from . import Causala
@@ -170,6 +173,45 @@ def get_app(db_path: str, jwt_secret: str, enable_rate_limit: bool = True) -> Fa
         for name in ("causala.ingests", "causala.lookups", "causala.conflicts"):
             lines.append(f"# TYPE {name} counter")
         return PlainTextResponse("\n".join(lines) + "\n")
+
+    @app.get("/api/v1/causal/graph")
+    @limiter.limit("30/minute")
+    async def graph_snapshot(request: Request, tenant: str = Depends(tenant_of)):
+        """All active claims for the tenant as edges (cause, effect, confidence, source)."""
+        try:
+            g = engine._graph(tenant)
+        except RuntimeError as _e:  # graph build failure (e.g. db locked) must not crash the UI
+            log.warning("graph snapshot failed: %s", _e)
+            return []
+        edges = []
+        for cause, effect, data in g.edges(data=True):
+            claim = data.get("claim")
+            edges.append({
+                "cause": cause,
+                "effect": effect,
+                "confidence": claim.confidence if claim else 0.0,
+                "source": claim.source if claim else "",
+            })
+        return edges
+
+    @app.post("/token")
+    async def bootstrap_token(request: Request, tenant: str = "acme"):
+        """Dev bootstrap: mint a Bearer token for the local twin.
+
+        Only exposed when CAUSALA_UI_TOKEN=1 (the serve default). Production
+        deployments must set CAUSALA_UI_TOKEN=0 and issue tokens via their IdP.
+        """
+        if os.environ.get("CAUSALA_UI_TOKEN", "1") != "1":
+            raise HTTPException(403, "token bootstrap disabled (set CAUSALA_UI_TOKEN=1 for local UI)")
+        from trustcore.security import make_token
+        token = make_token(tenant, "ui", cfg.jwt_secret)
+        return {"tenant_id": tenant, "token": token}
+
+    @app.post("/api/v1/causal/verify-chain")
+    @limiter.limit("10/minute")
+    async def verify_chain(request: Request, tenant: str = Depends(tenant_of)):
+        ok, broken_at = engine.verify_audit_chain()
+        return {"ok": ok, "broken_at": broken_at, "entries": len(engine.recent_audits(tenant, limit=10 ** 9))}
 
     # Web UI — premium browser twin, no build step, same twin as CLI/TUI
     try:
