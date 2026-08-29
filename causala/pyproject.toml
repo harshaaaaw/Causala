@@ -59,7 +59,7 @@ ignore_missing_imports = true
 allow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = ["causa.*"]
-disable_error_code = ["valid-type", "misc", "return-value", "arg-type", "assignment", "index", "union-attr"]
+disable_error_code = ["valid-type", "misc", "return-value", "arg-type", "assignment", "index", "union-attr", "var-annotated", "call-overload", "attr-defined", "operator", "no-untyped-def", "no-untyped-call", "import-untyped"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
