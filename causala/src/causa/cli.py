@@ -230,6 +230,31 @@ def watch(tenant: str = "acme", db: str = typer.Option(None, "--db")):
         typer.echo("stopped")
 
 
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", help="bind host"),
+    port: int = typer.Option(8000, "--port", help="bind port"),
+    tenant: str = typer.Option("acme", "--tenant", help="default tenant for the browser twin"),
+    db: str = typer.Option(None, "--db", help="sqlite path (default temp/causala-<tenant>.db)"),
+    secret: str = typer.Option(None, "--secret", help="JWT secret, min 32 bytes, or set CAUSALA_SECRET"),
+):
+    """Serve the browser twin. Open the printed URL in any browser, no build step."""
+    import os
+
+    sec = secret or os.environ.get("CAUSALA_SECRET") or "dev-secret-change-me-32chars-minimum-length!!"
+    db_path = db or str(Path(tempfile.gettempdir()) / f"causala-{tenant}.db")
+    try:
+        import uvicorn
+
+        from .server import get_app
+    except ImportError as e:
+        typer.echo(f"serve requires fastapi + uvicorn: pip install -e ./causala -- error: {e}")
+        raise typer.Exit(code=1) from e
+    typer.echo(f"CAUSALA browser twin on http://{host}:{port}  tenant {tenant}  db {db_path}")
+    typer.echo("Try: ingest a claim in the left pane, then Simulate price +3%. Every result has a receipt.")
+    uvicorn.run(get_app(db_path, sec), host=host, port=port, log_level="info")
+
+
 # ---- any-agent connector -----------------------------------------------------------
 
 @agent_app.command("list")

@@ -97,19 +97,70 @@ causala agent generic --cmd "my-agent --flag" "task"
 
 `causala tui` is a Textual cockpit. No browser. Keys `1` dashboard `2` graph `3` simulate `4` audit `5` agents `6` skills `c` simulate `q` quit.
 
+`causala serve` is the same twin in your browser. No build, no Node.
+
+```bash
+pip install -e ./causala -e ./ragforge
+causala serve  # -> http://127.0.0.1:8000  (also at /web)
+# open the URL, ingest a claim left, simulate center, copy the receipt right
+```
+
+Works offline with mock data if no server. Same SQLite ledger as CLI and TUI.
+
 [Full CLI and Python docs](causala/README.md)
 
 ## Architecture
 
+How to read it in 20 seconds: your warehouse CSV and docs go in the left, the twin validates and widens the band in the middle, every simulate writes a receipt on the right. One process. Same API whether you use CLI, TUI, or the browser.
+
 ```mermaid
-graph LR
-  CSV[(Warehouse CSV)] --> Twin[(Twin<br/>graph + SQLite)]
-  Ragforge[Ragforge<br/>citations] --> Twin
-  Twin --> Sim[Simulate<br/>90% CI]
-  Sim --> Audit[(Audit<br/>hash chain)]
-  Sim --> TUI[TUI]
+graph TB
+  subgraph sources [Sources]
+    CSV[(Warehouse<br/>CSV / JSON)]
+    Docs[(Docs<br/>Ragforge)]
+  end
+  subgraph interfaces [One twin, every surface]
+    CLI[CLI<br/>causala ingest/simulate]
+    TUI[TUI<br/>Textual cockpit]
+    Web[Web UI<br/>browser twin]
+    API[HTTP API<br/>FastAPI + Bearer JWT]
+    Agents[Agents<br/>Claude / Codex / Hermes]
+  end
+  subgraph core [Core twin - one process, no cluster]
+    Ingest[Ingest<br/>idempotent<br/>tenant+cause+effect+source]
+    Graph[Graph + Honesty<br/>networkx + SQLite<br/>thin 1.8x · contested 1.2x]
+    Sim[Simulate<br/>do-calculus<br/>point + 90% CI + audit_id]
+    Explain[Explain / Path<br/>ancestors + path<br/>every hop cited]
+    Audit[(Audit spine<br/>JSONL hash chain<br/>HMAC-SHA256)]
+  end
+  subgraph storage [Storage - swappable, contract stable]
+    SQLite[(SQLite<br/>claims)]
+    Ledger[(JSONL ledger<br/>prev_hash)]
+    Future{{Future<br/>Postgres / Neo4j / S3}}
+  end
+
+  CSV --> Ingest
+  Docs --> Ingest
+  Docs -. citations .-> Graph
+  Ingest --> Graph
+  Graph --> Sim
+  Sim --> Explain
+  Sim --> Audit
+  Explain --> Audit
+  Audit --> API
   Audit --> TUI
+  Audit --> Web
+  CLI --> API
+  TUI --> API
+  Web --> API
+  Agents --> API
+  Graph --> SQLite
+  Audit --> Ledger
+  Ledger -. same contract .-> Future
+  SQLite -. same contract .-> Future
 ```
+
+Premium dark diagram with full tenant and rate-limit detail: [`docs/architecture.html`](docs/architecture.html) — open in any browser, no dependencies. Also available as SVG for slides.
 
 One process on your laptop. No cluster. The twin recomputes downstream through your causal graph. I kept it to one file you can copy before you ask infra for Postgres or Neo4j. Principles:
 

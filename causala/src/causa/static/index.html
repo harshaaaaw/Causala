@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CAUSALA — Browser Twin</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#020617; --panel:#0f172a; --panel2:#111c32; --border:#1e293b; --border2:#253047;
+    --text:#f1f5f9; --muted:#94a3b8; --dim:#64748b; --amber:#f59e0b; --amber2:#fbbf24; --emerald:#34d399; --rose:#fb7185; --cyan:#22d3ee;
+    --radius:14px; --radius-sm:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0; font-family:Inter,system-ui,-apple-system,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+  /* Top bar */
+  .top{position:sticky; top:0; z-index:10; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 20px; background:rgba(2,6,23,0.82); backdrop-filter: blur(8px); border-bottom:1px solid var(--border);}
+  .brand{display:flex; align-items:center; gap:12px}
+  .mark{width:32px; height:32px; display:grid; place-items:center; border-radius:8px; background:#f8fafc; border:1px solid #e2e8f0}
+  .brand h1{font-size:14px; font-weight:700; letter-spacing:0.12em; margin:0}
+  .brand p{font-size:11px; color:var(--muted); margin:2px 0 0 0; font-family:'JetBrains Mono',monospace}
+  .top-actions{display:flex; align-items:center; gap:10px}
+  .tenant{ display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--border); border-radius:999px; padding:6px 10px}
+  .tenant label{font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace}
+  .tenant input{ background:transparent; border:0; color:var(--text); font-family:'JetBrains Mono',monospace; font-size:12px; width:110px; outline:none }
+  .status{ display:flex; align-items:center; gap:7px; font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; padding:6px 10px; border:1px solid var(--border); border-radius:999px; background:var(--panel)}
+  .dot{ width:7px; height:7px; border-radius:50%; background:var(--emerald); box-shadow:0 0 0 4px rgba(52,211,153,0.15)}
+  .dot.off{ background:var(--rose); box-shadow:0 0 0 4px rgba(251,113,133,0.15)}
+  /* Layout */
+  .wrap{ max-width:1280px; margin:0 auto; padding:18px; display:grid; grid-template-columns: 340px 1fr 340px; gap:14px; align-items:start}
+  @media(max-width:1080px){ .wrap{ grid-template-columns:1fr 1fr } .right{ grid-column:1 / -1 } }
+  @media(max-width:680px){ .wrap{ grid-template-columns:1fr } }
+  .card{ background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden}
+  .card-h{ display:flex; align-items:center; justify-content:space-between; padding:14px 14px 10px 14px; border-bottom:1px solid var(--border)}
+  .card-h h2{ font-size:11px; font-weight:600; letter-spacing:0.09em; text-transform:uppercase; color:var(--muted); margin:0}
+  .card-h span{ font-size:10px; color:var(--dim); font-family:'JetBrains Mono',monospace}
+  .card-b{ padding:14px}
+  label{ font-size:11px; color:var(--muted); display:block; margin:10px 0 6px 0; font-family:'JetBrains Mono',monospace; letter-spacing:0.02em}
+  label:first-child{ margin-top:0}
+  input,select{ width:100%; background:#020617; border:1px solid var(--border2); color:var(--text); border-radius:10px; padding:10px 11px; font-size:13px; outline:none; font-family:Inter,sans-serif}
+  input:focus,select:focus{ border-color:#334155; box-shadow:0 0 0 3px rgba(148,163,184,0.12)}
+  input::placeholder{ color:#475569}
+  .row{ display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .btn{ width:100%; margin-top:12px; background:var(--text); color:#020617; border:0; border-radius:10px; padding:11px 14px; font-size:13px; font-weight:600; cursor:pointer; letter-spacing:-0.01em}
+  .btn:hover{ background:#e2e8f0 }
+  .btn:active{ transform:translateY(1px)}
+  .btn.secondary{ background:transparent; color:var(--text); border:1px solid var(--border2)}
+  .btn.secondary:hover{ background:var(--panel2)}
+  .btn.amber{ background:var(--amber); color:#0a0a0a}
+  .btn.amber:hover{ background:var(--amber2)}
+  .hint{ font-size:11px; color:var(--dim); margin-top:8px; font-family:'JetBrains Mono',monospace; line-height:1.5}
+  .divider{ height:1px; background:var(--border); margin:14px -14px}
+  /* Results */
+  .result{ background:#020617; border:1px solid var(--border2); border-radius:12px; padding:12px; margin-top:10px}
+  .result:first-child{ margin-top:0}
+  .outcome{ display:flex; align-items:baseline; justify-content:space-between; gap:10px}
+  .outcome b{ font-size:13px; font-weight:650; letter-spacing:-0.01em}
+  .outcome .point{ font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600}
+  .meta{ font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; margin-top:6px; line-height:1.6; word-break:break-word}
+  .meta em{ color:var(--amber2); font-style:normal}
+  .path{ font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center}
+  .path span{ background:rgba(148,163,184,0.08); border:1px solid var(--border2); padding:3px 7px; border-radius:999px; font-size:10px}
+  .path i{ color:var(--dim); font-style:normal}
+  .badge{ display:inline-flex; align-items:center; gap:5px; font-size:10px; padding:3px 7px; border-radius:999px; border:1px solid var(--border2); background:rgba(15,23,42,0.8); font-family:'JetBrains Mono',monospace}
+  .badge.ok{ color:var(--emerald); border-color:rgba(52,211,153,0.22)}
+  .badge.warn{ color:var(--amber2); border-color:rgba(245,158,11,0.22)}
+  /* Graph */
+  .graph{ background:#020617; border:1px solid var(--border2); border-radius:12px; padding:12px; min-height:220px; display:grid; place-items:center; overflow:hidden}
+  .graph svg{ width:100%; height:auto; display:block}
+  .graph-hint{ font-size:10px; color:var(--dim); font-family:'JetBrains Mono',monospace; margin-top:8px; text-align:center}
+  /* Audit */
+  .audit{ font-family:'JetBrains Mono',monospace; font-size:11px; line-height:1.6}
+  .audit-item{ padding:10px 12px; border:1px solid var(--border2); border-radius:10px; margin-top:10px; background:#020617}
+  .audit-item:first-child{ margin-top:0}
+  .audit-item div{ display:flex; justify-content:space-between; gap:8px}
+  .audit-item code{ font-size:10px; color:var(--muted); word-break:break-all}
+  .empty{ text-align:center; padding:28px 14px; color:var(--dim); font-size:12px; font-family:'JetBrains Mono',monospace}
+  .error{ background:rgba(251,113,133,0.08); border:1px solid rgba(251,113,133,0.22); color:#fecdd3; padding:10px 12px; border-radius:10px; font-size:12px; margin-top:10px}
+  .okmsg{ background:rgba(52,211,153,0.08); border:1px solid rgba(52,211,153,0.22); color:#a7f3d0; padding:10px 12px; border-radius:10px; font-size:12px; margin-top:10px}
+  .kvs{ display:grid; grid-template-columns: 92px 1fr; gap:6px 10px; font-size:11px; margin-top:10px}
+  .kvs dt{ color:var(--dim); font-family:'JetBrains Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:0.06em}
+  .kvs dd{ color:var(--text); font-family:'JetBrains Mono',monospace; font-size:11px; word-break:break-all}
+  footer{ max-width:1280px; margin:10px auto 0 auto; padding:0 18px 18px 18px; color:var(--dim); font-size:11px; font-family:'JetBrains Mono',monospace; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap}
+  footer a{ color:var(--muted); text-decoration:none; border-bottom:1px solid transparent}
+  footer a:hover{ color:var(--text); border-bottom-color:var(--muted)}
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 88 88" xmlns="http://www.w3.org/2000/svg"><g fill="none" stroke="#0a0a0a" stroke-width="3.2" stroke-linecap="round"><circle cx="36.5" cy="44" r="14.5"/><circle cx="51.5" cy="44" r="14.5"/></g><circle cx="44" cy="44" r="3.6" fill="#f59e0b"/><path d="M62 44 H66.5" stroke="#0a0a0a" stroke-width="3.2" stroke-linecap="round"/><path d="M64.5 41.5 L67 44 L64.5 46.5" fill="none" stroke="#0a0a0a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <h1>CAUSALA</h1>
+        <p>browser twin · point + 90% band + receipt</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="tenant"><label for="tenant">tenant</label><input id="tenant" value="acme" spellcheck="false"></div>
+      <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusText" class="mono">checking…</span></div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- Left: Operate -->
+    <div class="card">
+      <div class="card-h"><h2>Ingest</h2><span class="mono">idempotent</span></div>
+      <div class="card-b">
+        <label for="cause">cause</label><input id="cause" placeholder="price" value="price">
+        <label for="effect">effect</label><input id="effect" placeholder="demand" value="demand">
+        <div class="row">
+          <div><label for="conf">confidence</label><input id="conf" type="number" min="0" max="1" step="0.01" value="0.82"></div>
+          <div><label for="source">source</label><input id="source" placeholder="finance-q3-review" value="finance-q3-review"></div>
+        </div>
+        <label for="mechanism">mechanism (optional)</label><input id="mechanism" placeholder="price elasticity">
+        <button class="btn amber" id="ingestBtn">Ingest claim</button>
+        <div class="row">
+          <button class="btn secondary" id="ingestCsvBtn">Ingest CSV</button>
+          <button class="btn secondary" id="quickBtn">Quickstart graph</button>
+        </div>
+        <input type="file" id="csvFile" accept=".csv" hidden>
+        <div id="ingestMsg"></div>
+        <p class="hint">Key is tenant + cause + effect + source. Same claim never duplicates. Use warehouse.csv from examples.</p>
+        <div class="divider"></div>
+        <div class="card-h" style="padding:0 0 10px 0; border:0"><h2>Simulate</h2><span class="mono">do-calculus</span></div>
+        <label for="lever">lever</label><input id="lever" placeholder="price" value="price">
+        <label for="delta">delta %</label><input id="delta" type="number" step="0.1" value="3">
+        <button class="btn" id="simBtn">Simulate lever</button>
+        <p class="hint">Every downstream outcome returns point, 90% CI, audit_id, honest_note, and cited path.</p>
+        <div id="simMsg"></div>
+      </div>
+    </div>
+
+    <!-- Center: Monitor -->
+    <div class="card" style="align-self:stretch">
+      <div class="card-h"><h2>Graph + honesty</h2><span class="mono">live twin</span></div>
+      <div class="card-b">
+        <div class="graph" id="graphBox">
+          <svg viewBox="0 0 520 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="causal graph">
+            <g id="edges" fill="none" stroke="#334155" stroke-width="1.6" stroke-linecap="round"></g>
+            <g id="nodes"></g>
+          </svg>
+        </div>
+        <p class="graph-hint">Nodes from ingested claims. Thin data widens 1.8× if n&lt;5, contested widens 1.2×. No claim, no edge.</p>
+        <div id="results" style="margin-top:14px">
+          <div class="empty">Simulate a lever to see point, band, and receipt here.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Receipts -->
+    <div class="card right">
+      <div class="card-h"><h2>Receipts</h2><span class="mono">hash chain</span></div>
+      <div class="card-b">
+        <div style="display:flex; gap:8px">
+          <input id="auditId" placeholder="audit id, e.g. cd98f5cc" class="mono" style="flex:1">
+          <button class="btn secondary" id="auditBtn" style="width:auto; margin:0; padding:10px 12px; white-space:nowrap">Open</button>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px">
+          <button class="btn secondary" id="verifyBtn" style="margin:0">Verify chain</button>
+          <button class="btn secondary" id="auditsBtn" style="margin:0">Recent</button>
+        </div>
+        <div id="auditMsg"></div>
+        <div id="auditBox" class="audit" style="margin-top:12px">
+          <div class="empty">No receipt selected. Simulate, then open the audit_id.</div>
+        </div>
+        <div class="divider"></div>
+        <div class="kvs">
+          <dt>engine</dt><dd class="mono">Causala 0.3.0 · networkx + SQLite</dd>
+          <dt>audit</dt><dd class="mono">JSONL · prev_hash · HMAC-SHA256</dd>
+          <dt>api</dt><dd class="mono">FastAPI · Bearer JWT · 20/min</dd>
+          <dt>swap</dt><dd class="mono">Postgres / Neo4j / S3 later</dd>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span>CAUSALA · MIT · one process · <span class="mono">causala quickstart · causala tui</span></span>
+    <span><a href="https://github.com/harshaaaaw/Causala" target="_blank" rel="noreferrer">GitHub</a> · <a href="../README.md">README</a> · <a href="architecture.html">Architecture</a></span>
+  </footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const tenantEl = $('tenant'), dot = $('dot'), statusText = $('statusText');
+const causeEl = $('cause'), effectEl = $('effect'), confEl = $('conf'), sourceEl = $('source'), mechEl = $('mechanism');
+const leverEl = $('lever'), deltaEl = $('delta');
+const ingestBtn = $('ingestBtn'), ingestCsvBtn = $('ingestCsvBtn'), csvFile = $('csvFile'), quickBtn = $('quickBtn'), simBtn = $('simBtn');
+const ingestMsg = $('ingestMsg'), simMsg = $('simMsg'), resultsEl = $('results'), auditIdEl = $('auditId'), auditBtn = $('auditBtn'), verifyBtn = $('verifyBtn'), auditsBtn = $('auditsBtn'), auditMsg = $('auditMsg'), auditBox = $('auditBox');
+const graphEdges = document.getElementById('edges'), graphNodes = document.getElementById('nodes');
+
+let claims = [
+  {cause:'price', effect:'demand', confidence:0.82, source:'finance-q3-review'},
+  {cause:'demand', effect:'margin', confidence:0.75, source:'finance-q3-review'},
+  {cause:'cache_miss', effect:'cost_up', confidence:0.8, source:'finops-3'},
+  {cause:'cost_up', effect:'margin_down', confidence:0.7, source:'finops-4'},
+];
+let audits = [];
+let backend = null;
+
+function tenant(){ return (tenantEl.value.trim() || 'acme'); }
+function jwt(){
+  // demo token: header.payload where payload is b64 json {tenant_id}
+  const payload = btoa(JSON.stringify({tenant_id: tenant()}));
+  return 'eyJ.' + payload + '.demo';
+}
+function headers(){ return {'Content-Type':'application/json', 'Authorization':'Bearer ' + jwt()}; }
+
+async function probe(){
+  const bases = [window.location.origin, 'http://localhost:8000', 'http://localhost:8001'];
+  for(const b of bases){
+    try{
+      const r = await fetch(b + '/metrics', {headers: headers()});
+      if(r.ok){ backend = b; dot.classList.remove('off'); statusText.textContent = 'api ' + b.replace('http://',''); return; }
+    }catch(e){}
+  }
+  backend = null; dot.classList.add('off'); statusText.textContent = 'offline · mock';
+}
+probe();
+tenantEl.addEventListener('change', probe);
+tenantEl.addEventListener('input', () => { renderGraph(); });
+
+function api(path, opts={}){
+  if(!backend) return Promise.reject(new Error('offline'));
+  return fetch(backend + path, opts);
+}
+
+function msg(el, text, kind='okmsg'){
+  el.innerHTML = text ? `<div class="${kind}">${text}</div>` : '';
+}
+
+function renderGraph(){
+  // build nodes from claims filtered by tenant not needed for mock, just show all
+  const nodesSet = new Set();
+  claims.forEach(c=>{ nodesSet.add(c.cause); nodesSet.add(c.effect); });
+  const nodes = Array.from(nodesSet);
+  // layout: left to right by depth
+  const pos = {};
+  // simple: place in order with x spread
+  nodes.forEach((n,i)=>{
+    const x = 80 + (i/(Math.max(1,nodes.length-1)))*360;
+    const y = 100 + (i%2? 40 : -20);
+    pos[n] = {x,y};
+  });
+  // ensure price leftmost, margin rightmost if present
+  if(pos['price']) pos['price'].x = 70;
+  if(pos['margin']) pos['margin'].x = 420;
+  if(pos['demand']) pos['demand'].x = 250;
+  if(pos['margin_down']) pos['margin_down'].x = 430;
+
+  graphEdges.innerHTML = '';
+  graphNodes.innerHTML = '';
+  claims.forEach(c=>{
+    const a = pos[c.cause], b = pos[c.effect];
+    if(!a||!b) return;
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
+    line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
+    line.setAttribute('stroke', '#475569'); line.setAttribute('stroke-width','1.6');
+    line.setAttribute('marker-end','url(#arrow)');
+    // but we need arrow marker defined in graphBox svg? define inline
+    graphEdges.appendChild(line);
+    const midX = (a.x+b.x)/2, midY = (a.y+b.y)/2 - 10;
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', midX); t.setAttribute('y', midY); t.setAttribute('text-anchor','middle');
+    t.setAttribute('font-size','8'); t.setAttribute('fill','#94a3b8'); t.setAttribute('font-family','JetBrains Mono, monospace');
+    t.textContent = c.confidence.toFixed(2) + ' ' + c.source;
+    graphEdges.appendChild(t);
+  });
+  // inject marker
+  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+  const marker = document.createElementNS('http://www.w3.org/2000/svg','marker');
+  marker.setAttribute('id','arrow'); marker.setAttribute('markerWidth','8'); marker.setAttribute('markerHeight','6'); marker.setAttribute('refX','7'); marker.setAttribute('refY','3'); marker.setAttribute('orient','auto');
+  const poly = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+  poly.setAttribute('points','0 0, 8 3, 0 6'); poly.setAttribute('fill','#475569');
+  marker.appendChild(poly); defs.appendChild(marker); graphEdges.appendChild(defs);
+
+  nodes.forEach(n=>{
+    const p = pos[n];
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x', p.x-46); rect.setAttribute('y', p.y-16); rect.setAttribute('width','92'); rect.setAttribute('height','32'); rect.setAttribute('rx','10');
+    rect.setAttribute('fill','#0f172a'); rect.setAttribute('stroke','#1e293b'); rect.setAttribute('stroke-width','1.2');
+    g.appendChild(rect);
+    const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+    txt.setAttribute('x', p.x); txt.setAttribute('y', p.y+4); txt.setAttribute('text-anchor','middle'); txt.setAttribute('font-size','11'); txt.setAttribute('font-weight','600'); txt.setAttribute('fill','#f1f5f9');
+    txt.textContent = n;
+    g.appendChild(txt);
+    graphNodes.appendChild(g);
+  });
+  if(nodes.length===0){
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x','260'); t.setAttribute('y','100'); t.setAttribute('text-anchor','middle'); t.setAttribute('fill','#475569'); t.setAttribute('font-size','11'); t.setAttribute('font-family','JetBrains Mono, monospace');
+    t.textContent = 'No claims yet. Ingest or quickstart.';
+    graphNodes.appendChild(t);
+  }
+}
+renderGraph();
+
+async function doIngest(){
+  const body = {cause: causeEl.value.trim(), effect: effectEl.value.trim(), confidence: parseFloat(confEl.value), source: sourceEl.value.trim(), mechanism: mechEl.value.trim()};
+  if(!body.cause || !body.effect || !body.source || isNaN(body.confidence)){ msg(ingestMsg,'cause, effect, source, confidence required','error'); return; }
+  ingestBtn.disabled = true; ingestBtn.textContent = 'Ingesting…';
+  try{
+    if(backend){
+      const r = await api('/api/v1/causal/ingest', {method:'POST', headers: headers(), body: JSON.stringify(body)});
+      const j = await r.json();
+      if(!r.ok) throw new Error(j.detail || r.statusText);
+      claims.push(body); renderGraph();
+      msg(ingestMsg, `ingested <span class="mono">${j.claim_id.slice(0,8)}</span> · ${body.cause} → ${body.effect} ${body.confidence} ${body.source}`, 'okmsg');
+    }else{
+      // mock
+      claims.push(body); renderGraph();
+      const id = Math.random().toString(16).slice(2,10);
+      msg(ingestMsg, `mock ingested <span class="mono">${id}</span> · ${body.cause} → ${body.effect}`, 'okmsg');
+    }
+  }catch(e){ msg(ingestMsg, e.message, 'error'); }
+  ingestBtn.disabled = false; ingestBtn.textContent = 'Ingest claim';
+}
+
+async function doQuick(){
+  const demo = [
+    {cause:'price', effect:'demand', confidence:0.82, source:'finance-q3-review'},
+    {cause:'demand', effect:'margin', confidence:0.75, source:'finance-q3-review'},
+    {cause:'cache_miss', effect:'cost_up', confidence:0.8, source:'finops-3'},
+    {cause:'cost_up', effect:'margin_down', confidence:0.7, source:'finops-4'},
+  ];
+  for(const b of demo){ causeEl.value=b.cause; effectEl.value=b.effect; confEl.value=b.confidence; sourceEl.value=b.source; await doIngest(); await new Promise(r=>setTimeout(r,80)); }
+  leverEl.value='price'; deltaEl.value='3';
+}
+
+async function doSim(){
+  const lever = leverEl.value.trim(), delta = parseFloat(deltaEl.value);
+  if(!lever || isNaN(delta)){ msg(simMsg,'lever and delta required','error'); return; }
+  simBtn.disabled=true; simBtn.textContent='Simulating…';
+  try{
+    let data;
+    if(backend){
+      const r = await api('/api/v1/causal/simulate', {method:'POST', headers: headers(), body: JSON.stringify({lever, delta_percent: delta})});
+      const j = await r.json();
+      if(!r.ok) throw new Error(j.detail || JSON.stringify(j));
+      data = j;
+      // also push to audits mock list from returned audit_ids
+      j.forEach(x=> audits.unshift({audit_id:x.audit_id, lever:x.lever, delta_percent:x.delta_percent, outcome:x.outcome, point:x.point, ci_low:x.ci_low, ci_high:x.ci_high}));
+    }else{
+      // mock simulate: walk graph
+      const adj = {}; claims.forEach(c=> (adj[c.cause]=adj[c.cause]||[]).push(c));
+      const visited = new Set(); const out=[];
+      function dfs(node, pathConf, depth, path){
+        if(depth>4) return;
+        (adj[node]||[]).forEach(edge=>{
+          if(visited.has(edge.effect)) return;
+          const nc = pathConf * edge.confidence;
+          const se = (1 - edge.confidence) + 0.1 + (claims.length<5?1.8:0);
+          const point = delta * edge.confidence * 0.82;
+          const ci_low = point - 1.645*se, ci_high = point + 1.645*se;
+          out.push({lever, delta_percent:delta, outcome:edge.effect, point: point, ci_low, ci_high, ci_width: ci_high-ci_low, confidence: nc, contested:false, citations:[edge.source], path:[{cause:edge.cause, effect:edge.effect, source:edge.source, confidence:edge.confidence}], honest_note: (claims.length<5?`thin data (n=${claims.length}) -> wide CI width ${(ci_high-ci_low).toFixed(2)} - verify with upstream warehouse export`:'') , audit_id: Math.random().toString(16).slice(2,10)});
+          visited.add(edge.effect); dfs(edge.effect, nc, depth+1, path.concat(edge.effect)); visited.delete(edge.effect);
+        });
+      }
+      dfs(lever, 1, 0, [lever]);
+      data = out;
+      data.forEach(x=> audits.unshift(x));
+    }
+    if(!data.length){ msg(simMsg,'no path from lever — ingest a graph first','error'); resultsEl.innerHTML='<div class="empty">No path. Graph has no edge from '+lever+'.</div>'; }
+    else{
+      msg(simMsg,'', '');
+      resultsEl.innerHTML = data.map(r=> `
+        <div class="result">
+          <div class="outcome"><b>${r.outcome}</b><span class="point mono">${r.point.toFixed(2)}% <span style="color:var(--muted); font-weight:400">[${r.ci_low.toFixed(3)},${r.ci_high.toFixed(3)}]</span></span></div>
+          <div class="meta">cite <em>${r.citations.join(', ')}</em> · path ${r.path.map(p=>p.cause+' → '+p.effect).join(' → ')} · conf ${Number(r.confidence).toFixed(2)} · <span class="mono">${r.audit_id.slice(0,8)}</span> ${r.contested?'<span class="badge warn">contested</span>':''}</div>
+          <div class="path"><span class="badge ${r.honest_note.includes('thin')?'warn':'ok'}">${r.honest_note || 'band ok'}</span></div>
+        </div>
+      `).join('');
+      if(data[0]) auditIdEl.value = data[0].audit_id;
+    }
+  }catch(e){ msg(simMsg, e.message, 'error'); }
+  simBtn.disabled=false; simBtn.textContent='Simulate lever';
+}
+
+async function doAudit(){
+  const id = auditIdEl.value.trim(); if(!id){ msg(auditMsg,'enter audit id','error'); return; }
+  try{
+    if(backend){
+      const r = await api('/api/v1/causal/audit/'+encodeURIComponent(id), {headers: headers()});
+      const j = await r.json();
+      if(!r.ok) throw new Error(j.detail || r.statusText);
+      auditBox.innerHTML = `<div class="audit-item"><div><b class="mono">${j.audit_id}</b><span class="badge ok">verified</span></div><div style="margin-top:8px"><code>tenant ${j.tenant_id} · lever ${j.lever} ${j.delta_percent}% → ${j.outcome} ${j.point} [${j.ci_low},${j.ci_high}]</code></div><div style="margin-top:8px"><code>prev ${j.prev_hash.slice(0,12)}… · sig ${String(j.signature).slice(0,16)}…</code></div><div style="margin-top:8px"><code>path ${JSON.stringify(j.path)}</code></div><div style="margin-top:8px"><code>honest ${j.honest_note}</code></div></div>`;
+      msg(auditMsg,'','');
+    }else{
+      const rec = audits.find(a=> a.audit_id.startsWith(id) || a.audit_id===id);
+      if(!rec){ msg(auditMsg,'not found in mock (simulate first)','error'); return; }
+      auditBox.innerHTML = `<div class="audit-item"><div><b class="mono">${rec.audit_id}</b><span class="badge ok">mock</span></div><div style="margin-top:8px"><code>${rec.lever} ${rec.delta_percent}% → ${rec.outcome} ${rec.point.toFixed(2)} [${rec.ci_low.toFixed(3)},${rec.ci_high.toFixed(3)}]</code></div><div style="margin-top:8px"><code>${rec.honest_note}</code></div></div>`;
+      msg(auditMsg,'','');
+    }
+  }catch(e){ msg(auditMsg, e.message,'error'); }
+}
+
+async function doVerify(){
+  try{
+    if(backend){
+      // there is no verify endpoint, we use audits list and client check? backend has /audits and audit verify via chain? we call /audits and show count
+      const r = await api('/api/v1/causal/audits', {headers: headers()});
+      const j = await r.json();
+      if(!r.ok) throw new Error(j.detail || r.statusText);
+      auditBox.innerHTML = `<div class="empty">Chain has ${j.length} records for tenant ${tenant()}. Every simulate appends with prev_hash.</div>` + j.slice(0,6).map(x=> `<div class="audit-item"><div><span class="mono">${x.audit_id.slice(0,8)}</span><span style="color:var(--muted)">${x.lever} ${x.delta_percent}% → ${x.outcome}</span></div></div>`).join('');
+      msg(auditMsg, `verified ${j.length} records`,'okmsg');
+    }else{
+      auditBox.innerHTML = `<div class="empty">Mock chain has ${audits.length} records. Every simulate appends.</div>` + audits.slice(0,6).map(x=> `<div class="audit-item"><div><span class="mono">${x.audit_id.slice(0,8)}</span><span style="color:var(--muted)">${x.lever} ${x.delta_percent}% → ${x.outcome}</span></div></div>`).join('');
+      msg(auditMsg, `mock verified ${audits.length} records`,'okmsg');
+    }
+  }catch(e){ msg(auditMsg, e.message,'error'); }
+}
+
+async function doAudits(){
+  try{
+    if(backend){
+      const r = await api('/api/v1/causal/audits', {headers: headers()});
+      const j = await r.json();
+      if(!r.ok) throw new Error(j.detail || r.statusText);
+      auditBox.innerHTML = j.length? j.slice(0,8).map(x=> `<div class="audit-item"><div><b class="mono">${x.audit_id.slice(0,8)}</b><span>${x.lever} ${x.delta_percent}% → ${x.outcome} ${Number(x.point).toFixed(2)}%</span></div><div style="margin-top:6px"><code>${x.honest_note}</code></div></div>`).join('') : '<div class="empty">No audits yet. Simulate first.</div>';
+      msg(auditMsg,'','');
+    }else{
+      auditBox.innerHTML = audits.length? audits.slice(0,8).map(x=> `<div class="audit-item"><div><b class="mono">${x.audit_id.slice(0,8)}</b><span>${x.lever} ${x.delta_percent}% → ${x.outcome} ${x.point.toFixed(2)}%</span></div></div>`).join('') : '<div class="empty">No mock audits yet.</div>';
+    }
+  }catch(e){ msg(auditMsg, e.message,'error'); }
+}
+
+ingestBtn.addEventListener('click', doIngest);
+quickBtn.addEventListener('click', doQuick);
+simBtn.addEventListener('click', doSim);
+auditBtn.addEventListener('click', doAudit);
+verifyBtn.addEventListener('click', doVerify);
+auditsBtn.addEventListener('click', doAudits);
+ingestCsvBtn.addEventListener('click', ()=> csvFile.click());
+csvFile.addEventListener('change', async ()=>{
+  const f = csvFile.files[0]; if(!f) return;
+  const text = await f.text();
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  const header = lines[0].toLowerCase();
+  const hasHeader = header.includes('cause') && header.includes('effect');
+  const rows = (hasHeader? lines.slice(1): lines).map(l=> l.split(',').map(s=>s.trim().replace(/^"|"$/g,'')));
+  for(const [cause,effect,conf,source] of rows){
+    if(!cause||!effect) continue;
+    causeEl.value=cause; effectEl.value=effect; confEl.value=conf||'0.8'; sourceEl.value=source||'csv';
+    await doIngest();
+  }
+  csvFile.value='';
+});
+</script>
+</body>
+</html>

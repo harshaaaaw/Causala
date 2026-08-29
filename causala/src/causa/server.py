@@ -15,7 +15,8 @@ Endpoints (all require `Bearer` JWT; tenant comes from verified token):
 from __future__ import annotations
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -169,5 +170,18 @@ def get_app(db_path: str, jwt_secret: str, enable_rate_limit: bool = True) -> Fa
         for name in ("causala.ingests", "causala.lookups", "causala.conflicts"):
             lines.append(f"# TYPE {name} counter")
         return PlainTextResponse("\n".join(lines) + "\n")
+
+    # Web UI — premium browser twin, no build step, same twin as CLI/TUI
+    try:
+        import pathlib as _pl
+        _static = _pl.Path(__file__).parent / "static"
+        if _static.exists():
+            app.mount("/web", StaticFiles(directory=str(_static), html=True), name="web")
+
+            @app.get("/", include_in_schema=False)
+            async def _web_root():
+                return FileResponse(str(_static / "index.html"))
+    except (OSError, RuntimeError) as _e:
+        log.warning("web UI not mounted: %s", _e)
 
     return app
