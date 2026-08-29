@@ -23,14 +23,12 @@ jobs:
           pip install ruff mypy bandit pytest pytest-asyncio
           pip install fastapi "uvicorn[standard]" "sqlalchemy[asyncio]" aiosqlite pydantic pyjwt networkx typer slowapi httpx textual rich opentelemetry-api
           pip install -e ./causala --no-deps
-          for p in packages/ragforge; do
-            if [ -f "$p/pyproject.toml" ]; then pip install -e "./$p" --no-deps || true; fi
-          done
+          pip install -e ./ragforge --no-deps || true
       - name: Ruff
-        run: ruff check causala/src packages --config causala/pyproject.toml
+        run: ruff check causala/src ragforge --config causala/pyproject.toml
       - name: Mypy
         run: mypy causala/src/causa --config-file causala/pyproject.toml --ignore-missing-imports --no-error-summary
       - name: Bandit
-        run: bandit -r causala/src/causa packages/ragforge/src -q --severity-level medium --confidence-level medium
+        run: bandit -r causala/src/causa ragforge/src -q --severity-level medium --confidence-level medium
       - name: Tests
-        run: pytest causala/tests packages/ragforge/tests -q
+        run: pytest causala/tests ragforge/tests -q

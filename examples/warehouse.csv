@@ -1,0 +1,5 @@
+cause,effect,confidence,source,mechanism
+price,demand,0.82,finance-q3-review,price elasticity
+demand,margin,0.75,finance-q3-review,volume to margin
+cache_miss,cost_up,0.8,finops-3,cache miss raises compute
+cost_up,margin_down,0.7,finops-4,cost erodes margin

@@ -8,12 +8,12 @@
 
 ## What this package is
 
-`causala` is the decision twin library: causal graph, simulation with 90% CI, honesty engine, hash-chained audit, tenant isolation. The repo also bundles `ragforge` (structure-aware RAG) under `packages/`. This package alone is importable and testable.
+`causala` is the twin library: causal graph, simulation with 90% CI, honesty engine, hash-chained audit, tenant isolation. The repo bundles `ragforge` (structure-aware RAG for claim sourcing) at top level `ragforge/` and `examples/warehouse.csv` for try-without-warehouse. This package alone is importable and testable.
 
 ## Install
 
 ```bash
-pip install -e ./causala  # from repo root
+pip install -e ./causala -e ./ragforge  # from repo root, twin + retriever
 # or after publish
 pip install causala
 ```

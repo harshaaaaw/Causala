@@ -1,0 +1,8 @@
+{
+  "tenant": "acme",
+  "claims": [
+    {"cause": "price", "effect": "demand", "confidence": 0.82, "source": "finance-q3-review"},
+    {"cause": "demand", "effect": "margin", "confidence": 0.75, "source": "finance-q3-review"},
+    {"cause": "cache_miss", "effect": "cost_up", "confidence": 0.8, "source": "finops-3"}
+  ]
+}

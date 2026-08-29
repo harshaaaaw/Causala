@@ -2,6 +2,7 @@
 retrieval quality? Spoiler from the tests: yes, measurably."""
 
 import pytest
+
 from ragforge import (
     Document,
     Embedder,

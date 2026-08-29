@@ -5,27 +5,28 @@ Thanks for looking at CAUSALA. CAUSALA is a per-company decision twin that defen
 ## What lives here
 
 - `causala/` - the twin (graph, simulate with CI, audit spine, API, CLI, TUI, agents, skills)
-- `packages/ragforge/` - structure-aware RAG used to source causal claims from documents
-- `docs/` - logo and demo
+- `ragforge/` - structure-aware RAG used to source causal claims from documents (top-level, not under packages)
+- `examples/` - warehouse.csv + causal_graph.json you can run without a warehouse
+- `docs/` - twin graph logo and demo (amber, not AEGIS green shield)
 - `trustcore` - bundled primitives inside `causala/src/trustcore` (event bus, security, audit spine)
 
 ## Local setup
 
 ```bash
 python -m venv .venv && source .venv/Scripts/activate  # Windows: .venv\Scripts\activate
-pip install -e ./causala -e ./packages/ragforge
+pip install -e ./causala -e ./ragforge
 export CAUSALA_JWT_SECRET=$(python -c "import secrets; print(secrets.token_hex(16))")
 causala quickstart  # proves the loop: ingest -> simulate + CI + audit
-causala tui         # dashboard
+causala tui         # cockpit
 ```
 
 ## Quality gate (runs in CI)
 
 ```bash
-ruff check causala/src packages --config causala/pyproject.toml
-mypy . --ignore-missing-imports
-bandit -r causala/src/causa packages --severity-level medium
-pytest -q
+ruff check causala/src ragforge --config causala/pyproject.toml
+mypy causala/src/causa --config-file causala/pyproject.toml --ignore-missing-imports
+bandit -r causala/src/causa ragforge --severity-level medium
+pytest causala/tests ragforge/tests -q
 ```
 
 The gate runs on Python 3.11 and 3.14, fail-fast false, two shards. Green is required to merge.

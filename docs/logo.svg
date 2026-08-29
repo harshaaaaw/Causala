@@ -1,21 +1,35 @@
-<svg width="140" height="140" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CAUSALA logo">
+<svg width="140" height="140" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CAUSALA twin logo">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+    <linearGradient id="amberLite" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbbf24"/>
       <stop offset="100%" stop-color="#92400e"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#000" flood-opacity="0.35"/>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#000" flood-opacity="0.25"/>
     </filter>
   </defs>
-  <!-- shield -->
-  <path d="M70 8 L118 28 L114 82 C114 102 96 120 70 132 C44 120 26 102 26 82 L22 28 Z" fill="#0a0a0a" stroke="url(#g)" stroke-width="3" filter="url(#shadow)"/>
-  <!-- causal graph C -->
-  <circle cx="52" cy="58" r="10" fill="#f59e0b" opacity="0.95"/>
-  <circle cx="88" cy="58" r="10" fill="#f59e0b" opacity="0.95"/>
-  <circle cx="70" cy="92" r="10" fill="#f59e0b" opacity="0.95"/>
-  <path d="M57 63 L83 63" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
-  <path d="M58 66 L67 84" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
-  <path d="M82 66 L73 84" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
-  <text x="70" y="96" text-anchor="middle" font-size="10" font-weight="700" fill="#0a0a0a" font-family="sans-serif">C</text>
+  <!-- twin shadow (ghost graph) -->
+  <g opacity="0.18">
+    <circle cx="74" cy="78" r="18" fill="none" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="4 4"/>
+    <circle cx="38" cy="58" r="14" fill="none" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="4 4"/>
+    <circle cx="102" cy="58" r="14" fill="none" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="4 4"/>
+  </g>
+  <!-- edges (causal arrows) -->
+  <path d="M46 68 L62 82" stroke="#f59e0b" stroke-width="2.6" stroke-linecap="round" opacity="0.9"/>
+  <polygon points="64,84 58,80 62,88" fill="#f59e0b" opacity="0.9"/>
+  <path d="M94 68 L78 82" stroke="#f59e0b" stroke-width="2.6" stroke-linecap="round" opacity="0.9"/>
+  <polygon points="76,84 82,80 78,88" fill="#f59e0b" opacity="0.9"/>
+  <path d="M52 58 L88 58" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round" opacity="0.35" stroke-dasharray="3 3"/>
+  <!-- nodes -->
+  <circle cx="38" cy="58" r="16" fill="url(#amberLite)" filter="url(#soft)" stroke="#0a0a0a" stroke-width="1.2"/>
+  <text x="38" y="62" text-anchor="middle" font-size="7.5" font-weight="800" fill="#1c0a00" font-family="Inter,sans-serif">price</text>
+  <circle cx="102" cy="58" r="16" fill="url(#amberLite)" filter="url(#soft)" stroke="#0a0a0a" stroke-width="1.2"/>
+  <text x="102" y="62" text-anchor="middle" font-size="7.5" font-weight="800" fill="#1c0a00" font-family="Inter,sans-serif">demand</text>
+  <circle cx="70" cy="98" r="20" fill="url(#amber)" filter="url(#soft)" stroke="#0a0a0a" stroke-width="1.4"/>
+  <text x="70" y="95" text-anchor="middle" font-size="8" font-weight="800" fill="#fff" font-family="Inter,sans-serif">margin</text>
+  <text x="70" y="105" text-anchor="middle" font-size="5.5" font-weight="600" fill="#ffedd5" font-family="Inter,sans-serif">+0.7% [0.2,1.2]</text>
 </svg>
