@@ -25,7 +25,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif" alt="CAUSALA terminal showing simulate price plus 3 percent to point and 90 percent CI and audit" width="880"/>
+  <img src="docs/demo.gif" alt="CAUSALA terminal — causala quickstart becomes point plus 90 percent CI plus receipt" width="720"/>
+</p>
+
+<p align="center">
+  <img src="docs/demo-web.gif" alt="CAUSALA browser twin — ingest left, graph center, receipt right, same SQLite ledger" width="720"/>
 </p>
 
 ```bash
@@ -37,7 +41,7 @@ demand:  2.46%  [1.985, 2.935]  audit cd98f5cc  finance-q3-review  price -> dema
 margin:  1.75%  [1.174, 2.332]  audit 03ef0410  finance-q3-review  price -> demand -> margin
 ```
 
-Copy, paste, see a lever become a cited number with a band and a receipt.
+Copy, paste, see a lever become a cited number with a band and a receipt. Or `causala serve` and do it in your browser — same twin, no build.
 
 ## Why this twin exists
 
